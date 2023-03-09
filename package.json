@@ -1,0 +1,8 @@
+{
+	"dependencies": {
+		"chatgpt": "^5.0.8",
+		"dotenv": "^16.0.3",
+		"grammy": "^1.14.1"
+	},
+	"type": "module"
+}
