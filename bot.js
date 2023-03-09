@@ -180,15 +180,12 @@ bot.on("message", async (ctx) => {
           }),
         ]);
 
-        console.log(result.detail.usage);
-
         await ctx.reply(`${result.text}`, {
           reply_to_message_id: ctx.message.message_id,
           parse_mode: "Markdown",
         });
-        console.log(
-          `${result.detail.usage.total_tokens} tokens used in this query`
-        );
+
+        console.log(result.detail.usage);
 
         console.log(`Function executed successfully from ${ctx.chat.id}`);
       } catch (error) {
