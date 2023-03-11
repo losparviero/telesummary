@@ -145,8 +145,8 @@ bot.on("message", async (ctx) => {
   if (!ctx.config.isDeveloper) {
     await bot.api.sendMessage(
       process.env.BOT_DEVELOPER,
-      `*From: ${name} (@${from.username}) ID: ${from.id}\nMessage: ${ctx.message.text}*`,
-      { parse_mode: "Markdown" }
+      `<b>From: ${name} (@${from.username}) ID: <code>${from.id}</code>\nMessage: ${ctx.message.text}</b>`,
+      { parse_mode: "HTML" }
     );
   }
   try {
