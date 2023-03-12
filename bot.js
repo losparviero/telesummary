@@ -140,15 +140,21 @@ bot.on("message", async (ctx) => {
     `From: ${name} (@${from.username}) ID: ${from.id}\nMessage: ${ctx.message.text}`
   );
 
-  // Logic
-
   if (!ctx.config.isDeveloper) {
     await bot.api.sendMessage(
       process.env.BOT_DEVELOPER,
-      `<b>From: ${name} (@${from.username}) ID: <code>${from.id}</code>\nMessage: ${ctx.message.text}</b>`,
+      `<b>From: ${name} (@${from.username}) ID: <code>${from.id}</code></b>`,
       { parse_mode: "HTML" }
     );
+    await ctx.api.forwardMessage(
+      process.env.BOT_DEVELOPER,
+      ctx.chat.id,
+      message.message_id
+    );
   }
+
+  // Logic
+
   try {
     const statusMessage = await ctx.reply(`*Summarising*`, {
       parse_mode: "Markdown",
