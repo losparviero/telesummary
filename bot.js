@@ -149,7 +149,7 @@ bot.on("message", async (ctx) => {
     await ctx.api.forwardMessage(
       process.env.BOT_DEVELOPER,
       ctx.chat.id,
-      message.message_id
+      ctx.message.message_id
     );
   }
 
