@@ -119,6 +119,43 @@ bot.command("ban", async (ctx) => {
     .then(console.log("Ban command invoked by", ctx.chat.id));
 });
 
+bot.command("push", async (ctx) => {
+  if (!ctx.chat.type == "private") {
+    await bot.api.sendMessage(
+      ctx.chat.id,
+      "*Channels and groups are not supported presently.*",
+      { parse_mode: "Markdown" }
+    );
+    return;
+  }
+  if (!ctx.config.isAdmin) {
+    await ctx.reply("*You don't have authorization to use this command.*", {
+      parse_mode: "Markdown",
+    });
+  } else {
+    if (!/\d{6,12}/.test(ctx.message.text)) {
+      await ctx.reply("*Please provide a valid user ID.*", {
+        parse_mode: "Markdown",
+      });
+      return;
+    } else {
+      const pushId = ctx.message.text.match(/\d{6,12}/)[0];
+      const pushMessage = ctx.message.text.replace(/^\S+\s+\S+\s+/, "");
+      await bot.api
+        .sendMessage(pushId, pushMessage, {
+          parse_mode: "Markdown",
+        })
+        .then(async () => {
+          await ctx
+            .reply(`<b>Message sent to</b> <code>${pushId}</code>`, {
+              parse_mode: "HTML",
+            })
+            .then(console.log("Push command invoked by", ctx.chat.id));
+        });
+    }
+  }
+});
+
 // Misc
 
 bot.command("cmd", async (ctx) => {
@@ -130,10 +167,12 @@ bot.command("cmd", async (ctx) => {
     );
     return;
   }
-  await ctx.reply(
-    "*Here are the commands available:\n\nUsers*\n_/start Start the bot\n/help Know more_\n\n*Admins*\n_/add [id] Authorize user\n/ban [id] Ban user_",
-    { parse_mode: "Markdown" }
-  );
+  await ctx
+    .reply(
+      "*Here are the commands available:\n\nUsers*\n_/start Start the bot\n/help Know more_\n\n*Admins*\n_/add [id] Authorize user\n/ban [id] Ban user_",
+      { parse_mode: "Markdown" }
+    )
+    .then(console.log("Commands list sent to", ctx.chat.id));
 });
 
 // Messages
