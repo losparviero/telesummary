@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 dotenv.config();
-import { Bot, webhookCallback, GrammyError, HttpError } from "grammy";
+import { Bot, session, GrammyError, HttpError } from "grammy";
+import { run, sequentialize } from "@grammyjs/runner";
 import { ChatGPTAPI } from "chatgpt";
 
 // Bot
@@ -34,6 +35,15 @@ async function responseTime(ctx, next) {
 }
 
 bot.use(responseTime);
+
+// Concurrency
+
+function getSessionKey(ctx) {
+  return ctx.chat?.id.toString();
+}
+
+bot.use(sequentialize(getSessionKey));
+bot.use(session({ getSessionKey }));
 
 // Commands
 
@@ -263,4 +273,4 @@ bot.catch((err) => {
 
 // Run
 
-bot.start();
+run(bot);
