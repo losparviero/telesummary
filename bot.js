@@ -128,7 +128,7 @@ bot.command("push", async (ctx) => {
     );
     return;
   }
-  if (!ctx.config.isAdmin) {
+  if (!ctx.config.isDeveloper) {
     await ctx.reply("*You don't have authorization to use this command.*", {
       parse_mode: "Markdown",
     });
