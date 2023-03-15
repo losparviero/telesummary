@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 dotenv.config();
 import { Bot, session, GrammyError, HttpError } from "grammy";
 import { run, sequentialize } from "@grammyjs/runner";
+import { hydrate } from "@grammyjs/hydrate";
 import { ChatGPTAPI } from "chatgpt";
 
 // Bot
@@ -42,8 +43,11 @@ function getSessionKey(ctx) {
   return ctx.chat?.id.toString();
 }
 
+// Plugins
+
 bot.use(sequentialize(getSessionKey));
 bot.use(session({ getSessionKey }));
+bot.use(hydrate());
 
 // Commands
 
@@ -71,108 +75,6 @@ bot.command("help", async (ctx) => {
       { parse_mode: "Markdown" }
     )
     .then(console.log("Help command sent to", ctx.chat.id));
-});
-
-// Moderation
-
-bot.command("add", async (ctx) => {
-  if (!ctx.chat.type == "private") {
-    await bot.api.sendMessage(
-      ctx.chat.id,
-      "*Channels and groups are not supported presently.*",
-      { parse_mode: "Markdown" }
-    );
-    return;
-  }
-  if (!ctx.config.isDeveloper) {
-    await ctx.reply("*You're not authorized to use this command.*", {
-      parse_mode: "Markdown",
-    });
-    return;
-  }
-  await ctx
-    .reply("*This command hasn't been implemented yet.*", {
-      parse_mode: "Markdown",
-    })
-    .then(console.log("Add command invoked by", ctx.chat.id));
-});
-
-bot.command("ban", async (ctx) => {
-  if (!ctx.chat.type == "private") {
-    await bot.api.sendMessage(
-      ctx.chat.id,
-      "*Channels and groups are not supported presently.*",
-      { parse_mode: "Markdown" }
-    );
-    return;
-  }
-  if (!ctx.config.isDeveloper) {
-    await ctx.reply("*You're not authorized to use this command.*", {
-      parse_mode: "Markdown",
-    });
-    return;
-  }
-  await ctx
-    .reply("*This command hasn't been implemented yet.*", {
-      parse_mode: "Markdown",
-    })
-    .then(console.log("Ban command invoked by", ctx.chat.id));
-});
-
-bot.command("push", async (ctx) => {
-  if (!ctx.chat.type == "private") {
-    await bot.api.sendMessage(
-      ctx.chat.id,
-      "*Channels and groups are not supported presently.*",
-      { parse_mode: "Markdown" }
-    );
-    return;
-  }
-  if (!ctx.config.isDeveloper) {
-    await ctx.reply("*You don't have authorization to use this command.*", {
-      parse_mode: "Markdown",
-    });
-  } else {
-    if (!/\d{6,12}/.test(ctx.message.text)) {
-      await ctx.reply("*Please provide a valid user ID.*", {
-        parse_mode: "Markdown",
-      });
-      return;
-    } else {
-      const pushId = ctx.message.text.match(/\d{6,12}/)[0];
-      const pushMessage = ctx.message.text.replace(/^\S+\s+\S+\s+/, "");
-      await bot.api
-        .sendMessage(pushId, pushMessage, {
-          parse_mode: "Markdown",
-        })
-        .then(async () => {
-          await ctx
-            .reply(`<b>Message sent to</b> <code>${pushId}</code>`, {
-              parse_mode: "HTML",
-            })
-            .then(console.log("Push command invoked by", ctx.chat.id));
-        });
-    }
-  }
-});
-
-// Misc
-
-bot.command("cmd", async (ctx) => {
-  if (!ctx.chat.type == "private") {
-    await bot.api.sendMessage(
-      ctx.chat.id,
-      "*Channels and groups are not supported presently.*",
-      { parse_mode: "Markdown" }
-    );
-    return;
-  }
-  await ctx
-    .reply(
-      "*Here are the commands available:\n\nUsers*\n_/start Start the bot\n/help Know more_\n\n*Admins*\n_/add [id] Authorize user\n/ban [id] Ban user_",
-      { parse_mode: "Markdown" }
-    )
-    .then(console.log("Commands list sent to", ctx.chat.id));
 });
 
 // Messages
@@ -208,17 +110,6 @@ bot.on("message", async (ctx) => {
     const statusMessage = await ctx.reply(`*Summarising*`, {
       parse_mode: "Markdown",
     });
-    async function deleteMessageWithDelay(fromId, messageId, delayMs) {
-      return new Promise((resolve, reject) => {
-        setTimeout(() => {
-          bot.api
-            .deleteMessage(fromId, messageId)
-            .then(() => resolve())
-            .catch((error) => reject(error));
-        }, delayMs);
-      });
-    }
-    await deleteMessageWithDelay(ctx.chat.id, statusMessage.message_id, 3000);
 
     // GPT
 
@@ -256,6 +147,7 @@ bot.on("message", async (ctx) => {
     }
 
     await sendMessageWithTimeout(ctx);
+    await statusMessage.delete();
   } catch (error) {
     if (error instanceof GrammyError) {
       if (error.message.includes("Forbidden: bot was blocked by the user")) {
