@@ -1,9 +1,23 @@
+#!/usr/bin/env node
+
+/*!
+ * TeleSummary
+ * Copyright (c) 2023
+ *
+ * @author Zubin
+ * @username (GitHub) losparviero
+ * @license AGPL-3.0
+ */
+
+// Add env vars as a preliminary
+
 import dotenv from "dotenv";
 dotenv.config();
-import { Bot, session, GrammyError, HttpError } from "grammy";
+import { Bot, session, GrammyError } from "grammy";
+import { hydrateReply, parseMode } from "@grammyjs/parse-mode";
 import { run, sequentialize } from "@grammyjs/runner";
 import { hydrate } from "@grammyjs/hydrate";
-import { ChatGPTAPI } from "chatgpt";
+import { ChatGPTClient } from "@waylaidwanderer/chatgpt-api";
 
 // Bot
 
@@ -11,31 +25,13 @@ const bot = new Bot(process.env.BOT_TOKEN);
 
 // Auth
 
-const api = new ChatGPTAPI({
-  apiKey: process.env.API_KEY,
-});
+const clientOptions = {
+  modelOptions: {
+    model: "gpt-3.5-turbo",
+  },
+};
 
-// Admin
-
-const authorizedUsers = process.env.BOT_DEVELOPER?.split(",").map(Number) || [];
-bot.use(async (ctx, next) => {
-  ctx.config = {
-    botDevelopers: authorizedUsers,
-    isDeveloper: authorizedUsers.includes(ctx.chat?.id),
-  };
-  await next();
-});
-
-// Response
-
-async function responseTime(ctx, next) {
-  const before = Date.now();
-  await next();
-  const after = Date.now();
-  console.log(`Response time: ${after - before} ms`);
-}
-
-bot.use(responseTime);
+const chatGptClient = new ChatGPTClient(process.env.API_KEY, clientOptions);
 
 // Concurrency
 
@@ -47,41 +43,39 @@ function getSessionKey(ctx) {
 
 bot.use(sequentialize(getSessionKey));
 bot.use(session({ getSessionKey }));
+bot.use(responseTime);
+bot.use(log);
+bot.use(admin);
 bot.use(hydrate());
+bot.use(hydrateReply);
 
-// Commands
+// Parse
 
-bot.command("start", async (ctx) => {
-  if (!ctx.chat.type == "private") {
-    await bot.api.sendMessage(
-      ctx.chat.id,
-      "*Channels and groups are not supported presently.*",
-      { parse_mode: "Markdown" }
-    );
-    return;
-  }
+bot.api.config.use(parseMode("Markdown"));
 
-  await ctx
-    .reply("*Welcome!* ✨\n_Send text to be summarized._", {
-      parse_mode: "Markdown",
-    })
-    .then(console.log("New user added:\n", ctx.from));
-});
+// Admin
 
-bot.command("help", async (ctx) => {
-  await ctx
-    .reply(
-      "*@anzubo Project.*\n\n_This bot summarises long text or articles.\nAll languages are supported!_",
-      { parse_mode: "Markdown" }
-    )
-    .then(console.log("Help command sent to", ctx.chat.id));
-});
+const admins = process.env.BOT_ADMIN?.split(",").map(Number) || [];
+async function admin(ctx, next) {
+  ctx.config = {
+    botAdmins: admins,
+    isAdmin: admins.includes(ctx.chat?.id),
+  };
+  await next();
+}
 
-// Messages
+// Response
 
-bot.on("message", async (ctx) => {
-  // Logging
+async function responseTime(ctx, next) {
+  const before = Date.now();
+  await next();
+  const after = Date.now();
+  console.log(`Response time: ${after - before} ms`);
+}
 
+// Log
+
+async function log(ctx, next) {
   const from = ctx.from;
   const name =
     from.last_name === undefined
@@ -91,31 +85,54 @@ bot.on("message", async (ctx) => {
     `From: ${name} (@${from.username}) ID: ${from.id}\nMessage: ${ctx.message.text}`
   );
 
-  if (!ctx.config.isDeveloper) {
+  const msgText = ctx.message.text;
+
+  if (!msgText.includes("/") && !admins.includes(ctx.chat?.id)) {
     await bot.api.sendMessage(
-      process.env.BOT_DEVELOPER,
-      `<b>From: ${name} (@${from.username}) ID: <code>${from.id}</code></b>`,
+      process.env.BOT_ADMIN,
+      `<b>From: ${ctx.from.first_name} (@${ctx.from.username}) ID: <code>${ctx.from.id}</code></b>`,
       { parse_mode: "HTML" }
     );
     await ctx.api.forwardMessage(
-      process.env.BOT_DEVELOPER,
+      process.env.BOT_ADMIN,
       ctx.chat.id,
       ctx.message.message_id
     );
   }
 
-  // Logic
+  await next();
+}
+
+// Commands
+
+bot.command("start", async (ctx) => {
+  await ctx
+    .reply("*Welcome!* ✨\n_Send text to be summarized._")
+    .then(console.log("New user added:\n", ctx.from))
+    .catch((e) => console.log(e));
+});
+
+bot.command("help", async (ctx) => {
+  await ctx
+    .reply(
+      "*@anzubo Project.*\n\n_This bot summarises long text or articles.\nAll languages are supported!_"
+    )
+    .then(console.log("Help command sent to", ctx.chat.id))
+    .catch((e) => console.log(e));
+});
+
+// Messages
+
+bot.on("message", async (ctx) => {
+  const statusMessage = await ctx.reply(`*Summarising*`);
+  let response;
 
   try {
-    const statusMessage = await ctx.reply(`*Summarising*`, {
-      parse_mode: "Markdown",
-    });
-
-    // GPT
-
-    async function sendMessageWithTimeout(ctx) {
+    async function consultGPT(ctx) {
       try {
-        const resultPromise = api.sendMessage((ctx.msg.text += " Tl;dr"));
+        const resultPromise = await chatGptClient.sendMessage(
+          (ctx.message.text += " Tl;dr")
+        );
 
         const result = await Promise.race([
           resultPromise,
@@ -126,14 +143,10 @@ bot.on("message", async (ctx) => {
           }),
         ]);
 
-        await ctx.reply(`${result.text}`, {
+        console.log(result);
+        await ctx.reply(result.response, {
           reply_to_message_id: ctx.message.message_id,
-          parse_mode: "Markdown",
         });
-
-        console.log(result.detail.usage);
-
-        console.log(`Function executed successfully from ${ctx.chat.id}`);
       } catch (error) {
         if (error === "Function timeout") {
           await ctx.reply("*Query timed out.*", {
@@ -146,8 +159,10 @@ bot.on("message", async (ctx) => {
       }
     }
 
-    await sendMessageWithTimeout(ctx);
+    await consultGPT(ctx);
     await statusMessage.delete();
+
+    // Error
   } catch (error) {
     if (error instanceof GrammyError) {
       if (error.message.includes("Forbidden: bot was blocked by the user")) {
@@ -155,12 +170,10 @@ bot.on("message", async (ctx) => {
       } else if (error.message.includes("Call to 'sendMessage' failed!")) {
         console.log("Error sending message: ", error);
         await ctx.reply(`*Error contacting Telegram.*`, {
-          parse_mode: "Markdown",
           reply_to_message_id: ctx.message.message_id,
         });
       } else {
         await ctx.reply(`*An error occurred: ${error.message}*`, {
-          parse_mode: "Markdown",
           reply_to_message_id: ctx.message.message_id,
         });
       }
@@ -169,36 +182,10 @@ bot.on("message", async (ctx) => {
     } else {
       console.log(`An error occured:`, error);
       await ctx.reply(`*An error occurred.*\n_Error: ${error.message}_`, {
-        parse_mode: "Markdown",
         reply_to_message_id: ctx.message.message_id,
       });
       return;
     }
-  }
-});
-
-// Error
-
-bot.catch((err) => {
-  const ctx = err.ctx;
-  console.error(
-    "Error while handling update",
-    ctx.update.update_id,
-    "\nQuery:",
-    ctx.msg.text
-  );
-  const e = err.error;
-  if (e instanceof GrammyError) {
-    console.error("Error in request:", e.description);
-    if (e.description === "Forbidden: bot was blocked by the user") {
-      console.log("Bot was blocked by the user");
-    } else {
-      ctx.reply("An error occurred");
-    }
-  } else if (e instanceof HttpError) {
-    console.error("Could not contact Telegram:", e);
-  } else {
-    console.error("Unknown error:", e);
   }
 });
 
